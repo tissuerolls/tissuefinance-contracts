@@ -7,3 +7,5 @@
 /test/
 /accounts.json
 /truffle-config.js
+
+.openzeppelin\.session
