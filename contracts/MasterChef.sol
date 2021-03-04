@@ -6,18 +6,17 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./libs/IBEP20.sol";
 import "./libs/SafeBEP20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./TissueToken.sol";
 
 // MasterChef is the master of Tissue. He can make Tissue and he is a fair guy.
 //
 // Note that it's ownable and the owner wields tremendous power. The ownership
-// will be transferred to a governance smart contract once Roll is sufficiently
+// will be transferred to a governance smart contract once ROLL is sufficiently
 // distributed and the community can show to govern itself.
 //
 // Have fun reading it. Hopefully it's bug-free. God bless.
-contract MasterChefV2 is Ownable, ReentrancyGuard {
+contract MasterChef is Ownable {
     using SafeMath for uint256;
     using SafeBEP20 for IBEP20;
 
@@ -26,13 +25,13 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         uint256 amount;         // How many LP tokens the user has provided.
         uint256 rewardDebt;     // Reward debt. See explanation below.
         //
-        // We do some fancy math here. Basically, any point in time, the amount of Rolls
+        // We do some fancy math here. Basically, any point in time, the amount of ROLLs
         // entitled to a user but is pending to be distributed is:
         //
-        //   pending reward = (user.amount * pool.accRollPerShare) - user.rewardDebt
+        //   pending reward = (user.amount * pool.accRolldPerShare) - user.rewardDebt
         //
         // Whenever a user deposits or withdraws LP tokens to a pool. Here's what happens:
-        //   1. The pool's `accRollPerShare` (and `lastRewardBlock`) gets updated.
+        //   1. The pool's `accRolldPerShare` (and `lastRewardBlock`) gets updated.
         //   2. User receives the pending reward sent to his/her address.
         //   3. User's `amount` gets updated.
         //   4. User's `rewardDebt` gets updated.
@@ -47,11 +46,11 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         uint16 depositFeeBP;      // Deposit fee in basis points
     }
 
-    // The TISSUE TOKEN!
+    // The Tissue TOKEN!
     TissueToken public roll;
     // Dev address.
     address public devaddr;
-    // Tissue tokens created per block.
+    // ROLL tokens created per block.
     uint256 public rollPerBlock;
     // Bonus muliplier for early roll makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
@@ -61,18 +60,15 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
-    mapping(uint256 => mapping(address => UserInfo)) public userInfo;
+    mapping (uint256 => mapping (address => UserInfo)) public userInfo;
     // Total allocation points. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
-    // The block number when Roll mining starts.
+    // The block number when ROLL mining starts.
     uint256 public startBlock;
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event SetFeeAddress(address indexed user, address indexed newAddress);
-    event SetDevAddress(address indexed user, address indexed newAddress);
-    event UpdateEmissionRate(address indexed user, uint256 goosePerBlock);
 
     constructor(
         TissueToken _roll,
@@ -92,31 +88,25 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         return poolInfo.length;
     }
 
-    mapping(IBEP20 => bool) public poolExistence;
-    modifier nonDuplicated(IBEP20 _lpToken) {
-        require(poolExistence[_lpToken] == false, "nonDuplicated: duplicated");
-        _;
-    }
-
     // Add a new lp to the pool. Can only be called by the owner.
-    function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner nonDuplicated(_lpToken) {
+    // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
+    function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner {
         require(_depositFeeBP <= 10000, "add: invalid deposit fee basis points");
         if (_withUpdate) {
             massUpdatePools();
         }
         uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
         totalAllocPoint = totalAllocPoint.add(_allocPoint);
-        poolExistence[_lpToken] = true;
         poolInfo.push(PoolInfo({
-        lpToken : _lpToken,
-        allocPoint : _allocPoint,
-        lastRewardBlock : lastRewardBlock,
-        accRollPerShare : 0,
-        depositFeeBP : _depositFeeBP
+            lpToken: _lpToken,
+            allocPoint: _allocPoint,
+            lastRewardBlock: lastRewardBlock,
+            accRollPerShare: 0,
+            depositFeeBP: _depositFeeBP
         }));
     }
 
-    // Update the given pool's Roll allocation point and deposit fee. Can only be called by the owner.
+    // Update the given pool's ROLL allocation point and deposit fee. Can only be called by the owner.
     function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner {
         require(_depositFeeBP <= 10000, "set: invalid deposit fee basis points");
         if (_withUpdate) {
@@ -132,8 +122,8 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         return _to.sub(_from).mul(BONUS_MULTIPLIER);
     }
 
-    // View function to see pending Rolls on frontend.
-    function pendingRolls(uint256 _pid, address _user) external view returns (uint256) {
+    // View function to see pending ROLLs on frontend.
+    function pendingRoll(uint256 _pid, address _user) external view returns (uint256) {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accRollPerShare = pool.accRollPerShare;
@@ -173,24 +163,24 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         pool.lastRewardBlock = block.number;
     }
 
-    // Deposit LP tokens to MasterChef for Roll allocation.
-    function deposit(uint256 _pid, uint256 _amount) public nonReentrant {
+    // Deposit LP tokens to MasterChef for ROLL allocation.
+    function deposit(uint256 _pid, uint256 _amount) public {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
         if (user.amount > 0) {
             uint256 pending = user.amount.mul(pool.accRollPerShare).div(1e12).sub(user.rewardDebt);
-            if (pending > 0) {
+            if(pending > 0) {
                 safeRollTransfer(msg.sender, pending);
             }
         }
-        if (_amount > 0) {
+        if(_amount > 0) {
             pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
-            if (pool.depositFeeBP > 0) {
+            if(pool.depositFeeBP > 0){
                 uint256 depositFee = _amount.mul(pool.depositFeeBP).div(10000);
                 pool.lpToken.safeTransfer(feeAddress, depositFee);
                 user.amount = user.amount.add(_amount).sub(depositFee);
-            } else {
+            }else{
                 user.amount = user.amount.add(_amount);
             }
         }
@@ -199,16 +189,16 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
     }
 
     // Withdraw LP tokens from MasterChef.
-    function withdraw(uint256 _pid, uint256 _amount) public nonReentrant {
+    function withdraw(uint256 _pid, uint256 _amount) public {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
         uint256 pending = user.amount.mul(pool.accRollPerShare).div(1e12).sub(user.rewardDebt);
-        if (pending > 0) {
+        if(pending > 0) {
             safeRollTransfer(msg.sender, pending);
         }
-        if (_amount > 0) {
+        if(_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
         }
@@ -217,7 +207,7 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
     }
 
     // Withdraw without caring about rewards. EMERGENCY ONLY.
-    function emergencyWithdraw(uint256 _pid) public nonReentrant {
+    function emergencyWithdraw(uint256 _pid) public {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         uint256 amount = user.amount;
@@ -227,35 +217,30 @@ contract MasterChefV2 is Ownable, ReentrancyGuard {
         emit EmergencyWithdraw(msg.sender, _pid, amount);
     }
 
-    // Safe roll transfer function, just in case if rounding error causes pool to not have enough Rolls.
+    // Safe roll transfer function, just in case if rounding error causes pool to not have enough ROLLs.
     function safeRollTransfer(address _to, uint256 _amount) internal {
         uint256 rollBal = roll.balanceOf(address(this));
-        bool transferSuccess = false;
         if (_amount > rollBal) {
-            transferSuccess = roll.transfer(_to, rollBal);
+            roll.transfer(_to, rollBal);
         } else {
-            transferSuccess = roll.transfer(_to, _amount);
+            roll.transfer(_to, _amount);
         }
-        require(transferSuccess, "safeRollTransfer: transfer failed");
     }
 
     // Update dev address by the previous dev.
     function dev(address _devaddr) public {
         require(msg.sender == devaddr, "dev: wut?");
         devaddr = _devaddr;
-        emit SetDevAddress(msg.sender, _devaddr);
     }
 
-    function setFeeAddress(address _feeAddress) public {
+    function setFeeAddress(address _feeAddress) public{
         require(msg.sender == feeAddress, "setFeeAddress: FORBIDDEN");
         feeAddress = _feeAddress;
-        emit SetFeeAddress(msg.sender, _feeAddress);
     }
 
     //Pancake has to add hidden dummy pools inorder to alter the emission, here we make it simple and transparent to all.
     function updateEmissionRate(uint256 _rollPerBlock) public onlyOwner {
         massUpdatePools();
         rollPerBlock = _rollPerBlock;
-        emit UpdateEmissionRate(msg.sender, _rollPerBlock);
     }
 }
